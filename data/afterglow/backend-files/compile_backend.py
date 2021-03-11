@@ -8,9 +8,9 @@
 #------------------------------------------------------------------------------
 """
 Search for all emcee backend files (ending in .h5) in the current directory. 
-Pull and compile samples from each file and generate 1) a plot of the parameter 
-chains, and 2) a corner plot of the posterior distributions. Save plots as png 
-files and display the best fit values.  
+Pull and compile samples from each file and  generate 1) a plot of the parameter  
+chains, 2) a corner plot of the posterior distributions, and 3) display best fit 
+values and uncertainties. Save plots as png files.  
 
 INPUTS
 ------
@@ -88,7 +88,7 @@ def compileBackendSamples():
     compiled_samples = np.asarray(compiled_samples)
     return compiled_samples 
 
-def plotChains(labels, samples):
+def plotChains(labels, timestamp, samples):
     """Plot chains for each parameter."""
 
     fig, axes = plt.subplots(np.shape(samples)[1], figsize=(10, 7), sharex=True)
@@ -98,10 +98,9 @@ def plotChains(labels, samples):
         ax.set_xlim(0, len(samples))
         ax.set_ylabel(labels[i])
         axes[-1].set_xlabel("step number")
-    fig.savefig("chain-burnin-{}-steps-{}.png".format(burn_in, 
-               time.strftime("%Y%m%d-%H%M")))
+    fig.savefig("chain-burnin-{}-steps-{}.png".format(burn_in, timestamp))
 
-def cornerPlot(labels, samples):
+def cornerPlot(labels, timestamp, samples):
     """Generate main plot."""
 
     xkcd_color = 'xkcd:' + 'black'
@@ -133,8 +132,7 @@ def cornerPlot(labels, samples):
                        pad=8.0)
 
     filename = "corner-plot-DL-" \
-               "burnin-{}-steps-{}.png".format(burn_in, 
-               time.strftime("%Y%m%d-%H%M"))
+               "burnin-{}-steps-{}.png".format(burn_in, timestamp)
 
     corner_plot.savefig(filename)
     print("Corner plot generated.")
@@ -164,16 +162,17 @@ def showFinalNumbers(labels, samples):
 def main():
     """
     Contains a pipeline that generates a list of compiled samples, 
-    creates plotting lables, and 
-      """
+    creates plotting lables, and displays final best fit values.
+    """
 
+    timestamp = time.strftime("%Y%m%d-%H%M")
     compiled_samples = compileBackendSamples()
     labels = createLabels()
     showFinalNumbers(labels, samples=compiled_samples)
 
     #  Generate plots 
-    plotChains(labels, samples=compiled_samples)
-    cornerPlot(labels, samples=compiled_samples)
+    plotChains(labels, timestamp, samples=compiled_samples)
+    cornerPlot(labels, timestamp, samples=compiled_samples)
 
 
 if __name__ == "__main__":
