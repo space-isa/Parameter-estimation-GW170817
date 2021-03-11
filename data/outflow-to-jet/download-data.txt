@@ -1,0 +1,6 @@
+Due to GitHub's file size limit of 100MB, the outflow to jet BPE analysis data lives in a 
+Dropbox folder that you can access using this link: 
+
+https://www.dropbox.com/s/doin13cvjbrwd73/emcee-outflow-to-jet.h5.zip?dl=0.
+
+Note that you will have to unzip the file before running the accompanying "run_backend.py" script.
