@@ -56,7 +56,7 @@ def createLabels():
     params = [r'log($\dot{m}_w$)',
               r'log(L$_0$)',
               r'$θ_{0}$',
-              r'$Δ(t)$',
+              r'$Δt$',
               r'v$_w$',
               r'T$_{engine}$',
               r'log($\Gamma_{0}$)']
