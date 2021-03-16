@@ -13,7 +13,7 @@ Project files for a Bayesian parameter estimation (BPE) study of the outflow and
 
 ## About the code
 
-Refer to the thesis manuscript pdf in the `doc` directory to learn more about the backgorund (Ch. 1-3), methodology (Ch. 4), and contextualized results (Ch. 5-6).
+Refer to the manuscript PDF located in the `doc/thesis-manuscript` directory to learn more about the project backgorund (Ch. 1-3), analysis methodology (Ch. 4), and contextualized results (Ch. 5-6).
 
 ## How to use
 
@@ -33,7 +33,7 @@ Refer to the thesis manuscript pdf in the `doc` directory to learn more about th
   - Both `afterglow` and `outflow-to-jet` contain samples of code that could be integrated into an existing project. [NOTE: Models are currently proprietary and are not provided.]
 
 ## Requirements
-This code was developed and tested using Python 3.8.6.
+This code was developed using Python 3.8.6.
 
 Besides standard Python library, this project utilzed:
 
