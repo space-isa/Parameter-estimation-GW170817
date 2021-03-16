@@ -39,7 +39,7 @@ This code was developed using Python 3.8.6.
 
 Besides standard Python library, this project utilzed:
 
-- Non-standard (standard) Python libraries
+- Non-standard Python libraries
   - `numpy`
   - `scipy`
   - `matplotlib`
@@ -50,7 +50,7 @@ Besides standard Python library, this project utilzed:
 
 ## Ideas for future development
  
-- Expand functionality of `exception_handler.py`.
+- Expand the functionality of `exception_handler.py`.
 - Developing a robust test to probe model sensitivity to priors.
 - Utilizing machine learning to speed up `emcee` runtime at the model-data comparison stage.
 
