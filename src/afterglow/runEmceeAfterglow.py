@@ -1,225 +1,337 @@
 #!/usr/bin/python3
 # Tested with Python 3.8.6
 #------------------------------------------------------------------------------
-#    runEmceeOutflow.py
+#    runEmceeAfterglow.py
 #------------------------------------------------------------------------------
 # Authors: Isabel J. Rodriguez, Davide Lazzati
 # Oregon State University
 #------------------------------------------------------------------------------
 """ 
-Use emcee module for Bayesian parameter estimation (BPE) analysis using outflow 
-code developed by Lazzati and Perna (2019). Outflow code is proprietary and is 
-thus not provided, however the general analysis process can be followed using 
-one's own code.  
+Use emcee module to generate parameter fits based on DL afterglow code. 
 
-FIT PARAMETERS
+Imported files
 --------------
-	lmdot: log(mass loss) [M_sol/s]
-	lLj: log(jet luminosity at injection) [erg/s]
-	thinj: jet opening angle at injection [deg]
-	dt: time delat to jet launch [s]
-	vW: wind veloicty [c]
-	Teng: engine activity duration [s]
-	lG0: log(Lorentz factor at injection)
+init_params.py
+plots.py
+multibandDataMooley.py
+exceptionHandler.py
+<afterglowModel.py>
 
-IMPORTED FILES
---------------
-<outflowModel.py>
-
-FUNCTIONS
+Functions 
 --------------
 
-afterglowFitData(None)
-	Define best value and uncertainties generated from afterglow BPE analysis.
-	Used by: main()
+cleanTempFolder(None)
+    Remove files from /temp folder.
+    Used by: main()
 
-priorBounds(None)
-	Define prior bounds for parameters of interest. We use a flat prior 
-	distribution, with some parameters in log space.
-	Used by: main()
+createParamFiles(*args)
+    Store emcee parameter values in .dat file. 
+    Used by: main()
 
-logLikelihood(*args)
-    Used by: logProbability()
+runAfterglow(*args)
+    Call afterglow script to calculate lightcurves.
+    Used by: logLikelihood()
 
 logPrior(*agrs)
     Create parameter lables using math text.
     Used by: logProbability()
 
+logLikelihood(*args)
+    Used by: logProbability()
+
 logProbability(*args)
     Used by: main()
 
-runEmcee(*args)
-    Call afterglow script to calculate lightcurves.
-    Used by: logLikelihood()
-
 main(None)
-    Run emcee package and save results in backend file.
-
+    Run emcee package, save and plot results. 
 """
 
-# Standard Python imports
-import os
-import time 
-
-#  Non-starndard Python imports
+#  Standard Python library imports 
 import numpy as np
+from math import log10
+import time
+import shutil #  for cleaning temp folder 
+import os 
+os.environ["OMP_NUM_THREADS"] = "1"
+import sys
+print("Python version {}".format(sys.version))
+import multiprocessing
+from multiprocessing import Pool
 
-#  Emcee module
-try: 
-	import emcee
-except:
-	print("Import the emcee module to continute.")
+#  Emcee imports 
+import emcee
+print("emcee version", emcee.__version__)
+import tqdm #  for progress bar 
 
-#  Companion scripts
-#from <Outflow model> import cocoon
-
-
-def afterglowFitData():
-	# These are the best fit values (w/uncertainties) 
-	# from the afterglow analysis as of 03052021.
-	  # NOTE: Thetas are given in degrees.
-	log_E_jet = [49.828, 0.456, 0.366]
-	log_E_cocoon = [48.514, 0.795, 0.798]
-	theta_jet = [2.154, 0.799, 0.576]
-	theata_cocoon = [14.570, 7.242, 7.040]
-	log_Gamma_0 = [3.544, 0.363, 0.890]
-
-	bestValue=np.array([log_E_jet[0], log_E_cocoon[0], 
-						theta_jet[0], theata_cocoon[0], 
-						log_Gamma_0[0]
-						])
-
-	upperSigma=np.array([log_E_jet[1], log_E_cocoon[1], 
-						 theta_jet[1], theata_cocoon[1], 
-						 log_Gamma_0[1]
-						])
-	
-	lowerSigma=np.array([log_E_jet[2], log_E_cocoon[2], 
-						 theta_jet[2], theata_cocoon[2], 
-						 log_Gamma_0[2]
-						])
-	return bestValue, upperSigma, lowerSigma
-
-def priorBounds():
-	"""Define priors."""
-
-	priorBnds=[-3, 2,  # Log(mdot_w) [solar masses / s]
-			   48, 53,  # Log(jet injection luminosity) [erg/s]
-			   1, 30,  # theta_injection [deg]
-			   0.01, 2,  # time delay [s]
-			   0.01, 0.75,  # wind velocity [c]
-			   0.1, 2,  # T_engine [s]
-			   1, 4]  # Log(Gamma injection) [--]
-	return priorBnds
-
-def logLikelihood(fitParms,bestValue,lowerSigma,upperSigma):
-	"""
-	Define log-likelihood function assuming 
-	a Gaussian distribution.
-
-	PARAMETERS
-	----------
-	fitParms: set of parameters
-	bestValue: array, float 
-	lowerSigma: array, float 
-	upperSigma: array, float
-
-	Returns
-	----------
-	chisqr: float
-		Chi squared
-		
-	""" 
-	lmdot, lLj, thinj, dt, vW, Teng, lG0 = fitParms
-	
-	#  Call outflow model
-	v_jh,theta_j,theta_c,e_c,A,B,T90obs,t_bo = cocoon(mdot_w=10**lmdot*2e33,L_j=10**lLj,
-		                           					  theta_0_deg=thinj,delta_t=dt,
-								   					  v_w=vW*3e10,t90=Teng,Gamma_0=10**lG0)
-	e_j = 10 ** lLj * Teng - e_c
-
-	if e_j<0: return -np.inf
-	model = np.array([np.log10(e_j),np.log10(e_c),theta_j,theta_c,lG0])
-
-	#  Calculate chi squared
-	chisqr = ((model - bestValue) ** 2 / upperSigma ** 2)
-	jj = np.where(model < bestValue)
-	chisqr[jj] = ((model[jj] - bestValue[jj]) ** 2 / lowerSigma[jj] ** 2)
-	chisqr = -0.5 * chisqr.sum()
-	# print(chisqr)
-	return chisqr
-
-def logPrior(fitParms,priorBnds):
-	"""
-	Define priors for a set of parameters, theta.
-
-	PARAMETERS
-	----------
-	fitParms: set of parameters 
-
-	RETURNS
-	----------
-	0.0 if sample is drawn within the bounds, -infinity otherwise. 
-	""" 
-	lmdot, lLj, thinj, dt, vW, Teng, lG0 = fitParms
-
-	if (priorBnds[0] <  lmdot < priorBnds[1] and
-		priorBnds[2] < lLj < priorBnds[3] and 
-		priorBnds[4] < thinj < priorBnds[5] and 
-		priorBnds[6] < dt < priorBnds[7] and 
-		priorBnds[8] < vW < priorBnds[9] and 
-		priorBnds[10] < Teng < priorBnds[11] and  
-		priorBnds[12] < lG0 < priorBnds[13]): 
-		return 0.0
-	return -np.inf
-
-def logProbability(fitParms,bestValue,lowerSigma,upperSigma,priorBnds):
-	"""Define full log-probabilty function."""
-
-	lp = logPrior(fitParms, priorBnds)
-	if not np.isfinite(lp):
-		return -np.inf
-	return lp + logLikelihood(fitParms, bestValue,
-							  lowerSigma, upperSigma)
+#  Importing from companion scripts 
+from cleanDataGW170817 import time_obs, flux_obs, flux_uncert
+from init_params import params_list
+import runAfterglowDL as run_ag
+from exceptionHandler import exception_handler
 
 
-def runEmcee(priorBnds, bestValue, lowerSigma, upperSigma):
-	"""Run emcee sampler and save progress to backend file."""
+def cleanTempFolder():
+    """Remove files from temp folder."""
 
-	nWalkers = 100
-	nSteps = 100
-	nDim = len(priorBnds) // 2
+    folder = "./temp/"
+    for filename in os.listdir(folder):
+        file_path = folder + filename
+        if os.path.isfile(file_path) or os.path.islink(file_path):
+            os.unlink(file_path)
+        elif os.path.isdir(file_path):
+            shutil.rmtree(file_path)
 
-	#  Initialize walkers at random positions
-	pos = np.zeros([nWalkers,nDim]) 
-	for i in range(nDim):
-		r_num = np.random.rand(nWalkers)
-		pos[:,i] = r_num * (priorBnds[2*i+1] - priorBnds[2*i]) + priorBnds[2*i]
+def createParamFiles(params_list):
+    """
+    Determine whether a duplicate file exists 
+    using pid and timestamp as identifiers.
+    If file exists, create a new one with a different timestamp.
+    If not, create a temp file containing emcee parameter samples.
 
-	#  Initialize backend file
-	timestamp = time.strftime("%Y%m%d-%H%M")
-	filename = "emcee-outflow-backend-{}.h5".format(timestamp)
-	backend = emcee.backends.HDFBackend(filename)
-	backend.reset(nWalkers, nDim)
+    Parameters
+    ----------
+    params_list: list
+        List of emcee parameter values. 
 
-	#  Initialize and run emcee sampler
-	sampler = emcee.EnsembleSampler(nWalkers, nDim, 
-									logProbability,
-									args=(bestValue, lowerSigma,
-									upperSigma, priorBnds),
-									backend=backend)
-	
-	sampler.run_mcmc(pos, nSteps, progress=True);
+    Returns
+    ----------
+    params_datafile: .dat file 
+        Contains emcee parameter values for use by runAfterglow.
+    """
 
-	#  Retrieve samples
-	burn_in = nSteps // 5
-	samples = sampler.get_chain(discard=burn_in, flat=True)
-	print("Emcee run complete. Check backend file for results.")
+    folder = "./temp/"
+    filename = "params-pid-{}-time-{}.dat".format(
+            str(os.getpid()), str(time.time()))
+    #  Ensure filenames are unique
+    if os.path.isfile(folder + filename):
+        new_filename = 'params-pid-{}-time-{}.dat'.format(
+            str(os.getpid()), str(time.time()))
+        params_datafile = folder + new_filename
+    else:
+        params_datafile = folder + filename
 
+    dataout = []
+    for i, item in enumerate(params_list):
+        dataout.append(item[0])
+    np.savetxt(params_datafile, dataout, fmt='%s')
+    return params_datafile
+
+def runAfterglow(eps_E, eps_B, p_e, 
+                 n_ISM, E_j, E_c, theta_j, 
+                 theta_c, theta_obs, Gamma_0):
+    """
+    Convert emcee parameter values from log space to linear space.  
+    Call afterglow script runAfterglowDL.py to calculate lightcurves.
+
+    Parameters
+    ----------
+    theta = {eps_E,...,Gamma_0}
+
+    Returns
+    ----------
+    lightcurve: float 
+    """ 
+
+    params = zip((eps_E, eps_B, p_e, 
+                  n_ISM, E_j, E_c, theta_j, 
+                  theta_c, theta_obs, Gamma_0))
+    params_list = (list(params))
+    params_datafile = createParamFiles(params_list)
+    lightcurve = run_ag.main(params_datafile=params_datafile)
+    return lightcurve
+
+def logPrior(theta):
+    """
+    Define flat ("uninformative") prior distributions for 
+    a set of parameters.
+
+    Parameters
+    ----------
+    theta: set of parameters 
+
+    Returns
+    ----------
+    0.0 if sample drawn within the bounds, -infinity otherwise. 
+    """ 
+    eps_E, eps_B, p_e, \
+    n_ISM, E_j, E_c, theta_j, \
+    theta_c, theta_obs, Gamma_0 = theta
+    #  NOTE: eps_E, eps_B, n_ISM, E_j, E_c, and Gamma_0 are flat priors
+    #  in log space
+
+    if (-4 <  eps_E < -0.3 and 
+        -4 < eps_B < -0.3 and 
+        2 < p_e < 2.5 and
+        -4 < n_ISM < -0.3 and
+        -4 < E_j < 50 and
+        -4 < E_c < 49 and
+        0 < theta_j < 10 and 
+        theta_j + 0.6 < theta_c < 20 and
+        0 < theta_obs < 90 and
+        -4 < Gamma_0 < 2.7):
+        return 0.0
+    return -np.inf
+
+def logLikelihood(theta, x, y, yerr):
+    """
+    Define log-likelihood function assuming 
+    a Gaussian distribution.
+    
+    Parameters
+    ----------
+    theta: set of parameters
+    y: array, float 
+        Observed flux 
+    yerr: array, float 
+        Observed flux uncertainty 
+
+    Returns
+    ----------
+    -0.5 * np.sum(((y-model)/yerr)**2): float
+        Likelihood function 
+    """ 
+    eps_E, eps_B, p_e, \
+    n_ISM, E_j, E_c, theta_j, \
+    theta_c, theta_obs, Gamma_0 = theta  
+
+    lightcurve = runAfterglow(eps_E, eps_B, p_e, 
+                              n_ISM, E_j, E_c, theta_j, 
+                              theta_c, theta_obs, Gamma_0)
+    model = lightcurve
+    return -0.5 * np.sum(((y-model)/yerr)**2) 
+
+def logProbability(theta, x, y, yerr):
+    """Define full log-probabilty function."""
+    if not np.isfinite(logPrior(theta)):
+        return -np.inf
+    return logPrior(theta) + logLikelihood(theta, x, y, yerr)
+
+def emceeSampler(params_list):
+    """" 
+    Run emcee sampler and check for convergence every n steps.  
+
+    Parameters
+    ----------
+    params_list: list, float
+        NOTE: This is a global variable, 
+        imported from init_params.py (see imports list, line 63). 
+
+    Returns
+    ----------
+    None  
+    """
+    def _prepEmcee(params_list, Gaussian_ball=False):
+        """
+        Iniitalize walkers around initial guess. 
+        
+        If 'Gaussian_ball' is set to True, initialize walkers in a small 
+        Gaussian ball around the inital guess.
+        """
+        num_params = len(params_list)
+        print("# of parameters emcee is fitting: {}".format(num_params))
+        print("Initial parameter guesses:{}".format(params_list))
+        params_list = np.reshape(params_list, (1, num_params))
+        if Gaussian_ball == True:
+            pos = params_list + 1e-4 * np.random.randn(n_walkers, num_params)
+        else:
+            pos = params_list * np.random.randn(n_walkers, num_params)
+            print(pos)
+        print("Initial walkers set.")
+        nwalkers, ndim = pos.shape
+        return nwalkers, ndim, pos
+
+    def _createBackendFile():
+        """Generate a .h5 backend file to save and monitor progress.""" 
+        print(os.getcwd())
+        folder = "./backend"
+        datestamp = time.strftime("%Y%m%d-%H%M")
+        filename = "backend-file-{}.h5".format(datestamp)
+        backend = emcee.backends.HDFBackend(folder+filename)
+
+        return backend
+
+    def _saveResults(backend, samples):
+        """Rename backend file to match when the emcee run completed."""
+        datestamp = time.strftime("%Y%m%d-%H%M")
+        backend_folder = './backend/'
+        filename = "backend-file-{}.h5".format(datestamp)
+        os.rename(backend.filename,
+                  backend_folder + filename) 
+
+    def _runEmcee(backend, nwalkers, ndim, pos):
+        """            
+        Set up a pool process to run emcee in parallel. 
+        Run emcee sampler and check for convergence very n steps,
+        where n is user-defined. 
+        """
+        backend.reset(nwalkers, ndim)
+        index = 0
+        autocorr = np.empty(max_iter)
+        old_tau = np.inf
+        
+        #  Set up parallel processing 
+        with Pool(processes = n_processes) as pool:
+            sampler = emcee.EnsembleSampler(nwalkers, 
+                                            ndim, 
+                                            logProbability,
+                                            args = (x,y,yerr), 
+                                            backend=backend, 
+                                            pool=pool)
+            #  Run emcee 
+            for sample in sampler.sample(
+                pos, iterations=max_iter, progress=True):
+
+                #print("log_prob = {} ".format(sampler.get_log_prob()))
+                #print("tau = {}".format(sampler.get_autocorr_time()))
+                #print("acceptance fraction = {} ".format(sampler.acceptance_fraction))  
+
+                #  Check for convergence very "check_iter" steps
+                if sampler.iteration % check_iter:
+                    continue
+                tau = sampler.get_autocorr_time(tol=0)
+                autocorr[index] = np.mean(tau)
+                index += 1
+                converged = np.all(tau * 100 < sampler.iteration)
+                converged &= np.all(np.abs(old_tau - tau) / tau < 0.01)
+                if converged:
+                    break
+                old_tau = tau
+
+                #  Get samples 
+                samples = sampler.chain[:, :, :].reshape((-1,ndim))
+                print(samples.shape, samples)
+        return samples
+
+    backend = _createBackendFile()
+    nwalkers, ndim, pos = _prepEmcee(params_list)
+    samples = _runEmcee(backend, nwalkers, ndim, pos)
+    _saveResults(backend, samples)
+    print("Emcee run complete. Access backend file to plot.")
+
+@exception_handler
 def main():
-	priorBnds = priorBounds()
-	bestValue, upperSigma, lowerSigma = afterglowFitData()
-	runEmcee(priorBnds, bestValue, lowerSigma, upperSigma)
+    """Clean temp folder and run emcee sampler."""
+    cleanTempFolder()
+    #  Run emcee sampler code 
+    emceeSampler(params_list)
+
 
 if __name__ == "__main__":
-	main()
+    # Global variables from imports  
+    x = time_obs
+    y = flux_obs
+    yerr = flux_uncert 
+    num_params = len(params_list)
+    params = np.reshape(params_list, (1, num_params))
+
+    # User-defined global variables 
+    n_walkers = 20  
+    n_processes = 1
+    max_iter = 1
+
+    #  Check for convergence every n iterations
+    #  NOTE: max_iter must be divisible by n
+    check_iter = 1 
+
+    #  Run script 
+    main() 

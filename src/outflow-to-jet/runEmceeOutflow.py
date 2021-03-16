@@ -59,7 +59,9 @@ main(None)
 
 # Standard Python imports
 import os
-import time 
+import time
+import sys
+print("Python version {}".format(sys.version))
 
 #  Non-starndard Python imports
 import numpy as np
@@ -67,6 +69,7 @@ import numpy as np
 #  Emcee module
 try: 
 	import emcee
+	print("emcee version {}".format(emcee.__version__))
 except:
 	print("Import the emcee module to continute.")
 
