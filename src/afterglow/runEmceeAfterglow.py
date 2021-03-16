@@ -63,10 +63,10 @@ import emcee
 print("emcee version", emcee.__version__)
 import tqdm #  for progress bar 
 
-#  Importing from companion scripts 
+#  Companion scripts 
 from cleanDataGW170817 import time_obs, flux_obs, flux_uncert
 from init_params import params_list
-import runAfterglowDL as run_ag
+# import <yourAfterglowModel> as run_ag
 from exceptionHandler import exception_handler
 
 
@@ -312,7 +312,6 @@ def emceeSampler(params_list):
 def main():
     """Clean temp folder and run emcee sampler."""
     cleanTempFolder()
-    #  Run emcee sampler code 
     emceeSampler(params_list)
 
 
