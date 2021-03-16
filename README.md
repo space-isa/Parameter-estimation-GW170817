@@ -28,6 +28,8 @@ Refer to the manuscript PDF located in the `doc/thesis-manuscript` directory to 
     3) a directory `example-plots` with examples of what the plots resulting from (2) should look like 
   
 - In the `doc` directory:
+  - `thesis-manuscript` holds both the manuscript PDF and LaTeX project folder (containing .tex and .bib files as well as all figures used). 
+  - `defense-slides` contains a PDF version of my defense presentation
 
 - In the `src`directory:
   - Both `afterglow` and `outflow-to-jet` contain samples of code that could be integrated into an existing project. [NOTE: Models are currently proprietary and are not provided.]
